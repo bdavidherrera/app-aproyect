@@ -1,0 +1,35 @@
+name: flutter_application_4_geodesica
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  path_provider: ^2.1.1
+  url_launcher: ^6.3.1
+  provider: ^6.1.4
+  animate_do: ^4.2.0
+  flutter_animate: ^4.5.2
+  lottie: ^3.3.1
+  simple_ripple_animation: ^0.1.0
+  google_fonts: ^6.2.1
+  firebase_core: ^2.25.4
+  firebase_auth: ^4.17.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - imagenes/
