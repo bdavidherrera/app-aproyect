@@ -2,10 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_application_4_geodesica/data/database_helper.dart';
 import 'package:flutter_application_4_geodesica/model/user_message_model.dart';
 import 'package:flutter_application_4_geodesica/model/chat_message_model.dart';
+import 'package:flutter_application_4_geodesica/services/gemini_service.dart';
+import 'package:sqflite/sqflite.dart';
 
 class ChatProvider with ChangeNotifier {
   List<UserMessageModel> _messages = [];
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final GeminiService _geminiService = GeminiService();
 
   List<UserMessageModel> get messages => _messages;
 
@@ -80,100 +83,57 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Procesa una pregunta relacionada con contabilidad
-  Future<String> processAccountingQuery(String query) async {
-    query = query.toLowerCase();
-    String response = '';
-
-    // Obtener datos de contabilidad
-    final dbHelper = DatabaseHelper();
-
+  Future<String> processNaturalLanguageQuery(String query) async {
     try {
-      // Consultas específicas
-      if (query.contains('total de ingresos') ||
-          query.contains('cuánto ingresó')) {
-        final totalIngresos = await dbHelper.getTotalIngresos();
-        response =
-            'El total de ingresos es de \$${totalIngresos.toStringAsFixed(2)}.';
-      } else if (query.contains('total de gastos') ||
-          query.contains('cuánto se gastó')) {
-        final totalGastos = await dbHelper.getTotalGastos();
-        response =
-            'El total de gastos es de \$${totalGastos.toStringAsFixed(2)}.';
-      } else if (query.contains('balance') ||
-          query.contains('saldo') ||
-          query.contains('ganancias')) {
-        final totalIngresos = await dbHelper.getTotalIngresos();
-        final totalGastos = await dbHelper.getTotalGastos();
-        final balance = totalIngresos - totalGastos;
-        response =
-            'El balance actual es de \$${balance.toStringAsFixed(2)}. ' +
-            'Total de ingresos: \$${totalIngresos.toStringAsFixed(2)}. ' +
-            'Total de gastos: \$${totalGastos.toStringAsFixed(2)}.';
-      } else if (query.contains('gastos por categoría') ||
-          query.contains('desglose de gastos')) {
-        final gastosPorCategoria = await dbHelper.getGastosPorCategoria();
-        response = 'Desglose de gastos por categoría:\n';
-        gastosPorCategoria.forEach((categoria, monto) {
-          response += '- $categoria: \$${monto.toStringAsFixed(2)}\n';
-        });
-      } else if (query.contains('último') || query.contains('recientes')) {
-        final transacciones = await dbHelper.getAllContabilidadEntries();
-        if (transacciones.isNotEmpty) {
-          response = 'Últimas transacciones:\n';
-          for (
-            int i = 0;
-            i < (transacciones.length > 5 ? 5 : transacciones.length);
-            i++
-          ) {
-            final t = transacciones[i];
-            response +=
-                '- ${t['fecha']}: ${t['descripcion']} - \$${t['monto'].toStringAsFixed(2)} (${t['tipo']})\n';
-          }
-        } else {
-          response = 'No hay transacciones registradas.';
-        }
-      } else if (query.contains('buscar')) {
-        // Extraer el término de búsqueda
-        final searchTerm = _extractSearchTerm(query);
-        if (searchTerm.isNotEmpty) {
-          final resultados = await dbHelper.searchContabilidad(searchTerm);
-          if (resultados.isNotEmpty) {
-            response = 'Resultados para "$searchTerm":\n';
-            for (var resultado in resultados) {
-              response +=
-                  '- ${resultado['fecha']}: ${resultado['descripcion']} - \$${resultado['monto'].toStringAsFixed(2)} (${resultado['tipo']})\n';
-            }
-          } else {
-            response = 'No se encontraron resultados para "$searchTerm".';
-          }
-        } else {
-          response = 'Por favor, especifica qué quieres buscar.';
-        }
-      } else {
-        // Respuesta genérica si no es una consulta específica
-        response =
-            'Puedo ayudarte con consultas de contabilidad como:\n' +
-            '- Total de ingresos\n' +
-            '- Total de gastos\n' +
-            '- Balance actual\n' +
-            '- Gastos por categoría\n' +
-            '- Últimas transacciones\n' +
-            '- Buscar [término]';
-      }
+      // 1. Traducir la pregunta a SQL usando Gemini
+      final sqlQuery = await _geminiService.translateToSQL(query);
+      
+      // 2. Ejecutar la consulta SQL en la base de datos local
+      final results = await _executeSQLQuery(sqlQuery);
+      
+      // 3. Formatear los resultados para mostrarlos al usuario
+      return _formatResults(results);
     } catch (e) {
-      response = 'Lo siento, ocurrió un error al procesar tu consulta: $e';
+      return 'Lo siento, ocurrió un error al procesar tu consulta: $e';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _executeSQLQuery(String sqlQuery) async {
+    Database db = await _dbHelper.database;
+    
+    // Verificar que la consulta sea segura (solo SELECT)
+    if (!sqlQuery.trim().toUpperCase().startsWith('SELECT')) {
+      throw Exception('Solo se permiten consultas SELECT');
+    }
+    
+    return await db.rawQuery(sqlQuery);
+  }
+
+  String _formatResults(List<Map<String, dynamic>> results) {
+    if (results.isEmpty) {
+      return 'No se encontraron resultados para tu consulta.';
     }
 
+    String response = 'Resultados de tu consulta:\n\n';
+    
+    // Mostrar las columnas
+    final columns = results.first.keys.toList();
+    response += '| ${columns.join(' | ')} |\n';
+    
+    // Mostrar los datos
+    for (var row in results) {
+      response += '| ${columns.map((col) => row[col].toString()).join(' | ')} |\n';
+    }
+    
     return response;
   }
 
-  String _extractSearchTerm(String query) {
-    // Eliminar "buscar" de la consulta
-    final parts = query.split('buscar');
-    if (parts.length > 1) {
-      return parts[1].trim();
+  // Procesa una pregunta relacionada con contabilidad usando el nuevo sistema basado en NLP
+  Future<String> processAccountingQuery(String query) async {
+    try {
+      return await processNaturalLanguageQuery(query);
+    } catch (e) {
+      return 'Lo siento, ocurrió un error al procesar tu consulta: $e';
     }
-    return '';
   }
 }

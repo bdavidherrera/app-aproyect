@@ -23,6 +23,8 @@ dependencies:
   google_fonts: ^6.2.1
   firebase_core: ^2.25.4
   firebase_auth: ^4.17.4
+  google_generative_ai: ^0.4.7
+
 
 dev_dependencies:
   flutter_test:
